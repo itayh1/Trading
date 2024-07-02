@@ -1,0 +1,7 @@
+data
+
+./src/grapher.py
+./src/optimizeparams.py
+./src/.ipynb_checkpoints
+#./src/*.html
+#./src/*.md
