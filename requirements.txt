@@ -1,0 +1,13 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: win-64
+
+numba=0.60.0=py310h7793332_0
+numpy=1.26.3=py310h055cbcc_0
+pandas=2.1.4=py310h4ed8f06_0
+pip=23.3.1=py310haa95532_0
+pytables=3.8.0=py310h5351e0d_2
+quantstats=0.0.62=pyhd8ed1ab_0
+requests=2.31.0=py310haa95532_0
+yfinance
+yaml
