@@ -5,7 +5,8 @@ import yaml
 
 class Config:
     data_dir = '../data/'
-    h5_file_path = f"{data_dir}/eod_price_data.h5"
+    eod_file_path = f"{data_dir}/eod_price_data.h5"
+    five_m_file_path = f"{data_dir}/5m_price_data.h5"
     tickers_filepath = "tickers_list.yaml"
 
     @staticmethod

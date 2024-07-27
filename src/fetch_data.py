@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import json
 import logging
 
+import pandas
 # import matplotlib.pyplot as plt
 # from mplfinance.original_flavor import candlestick_ohlc
 # import matplotlib.dates as mdates
@@ -14,14 +15,15 @@ import yfinance as yf
 
 from src.config import Config
 
+LastUpdateDict = Dict[str, datetime]
 
-def get_symbols(h5_file_path, key='US'):
+
+def get_existing_symbols_in_db(h5_file_path) -> set:
     """
     Open an HDF5 file and return a list of symbols from the 'Code' column.
 
     Parameters:
         h5_file_path (str): The path to the HDF5 file.
-        key (str): The key to use when reading the HDF5 file. Default is 'exchanges'.
 
     Returns:
         list: A list of symbols if successful; otherwise, an empty list.
@@ -32,25 +34,17 @@ def get_symbols(h5_file_path, key='US'):
     # Check if the file exists
     if not h5_file_path.exists():
         logging.info(f"The file {h5_file_path} does not exist.")
-        return []
+        return set()
 
     try:
-        # Read the DataFrame from the HDF5 file
-        df = pd.read_hdf(h5_file_path, key=key)
+        with pd.HDFStore(str(h5_file_path), 'r') as store:
+            existing_symbols = {key[1:] for key in store.keys()}
 
-        # Check if 'Code' column exists
-        if 'Code' not in df.columns:
-            logging.info(f"The 'Code' column does not exist in the DataFrame.")
-            return []
-
-        # Get the list of symbols from the 'Code' column
-        symbols = df['Code'].tolist()
-
-        return symbols
+        return existing_symbols
 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
-        return []
+        return set()
 
 def fetch_data_from_yahoo_finance(tickers: List[str]|Set[str],
                                   start_date: datetime,
@@ -60,90 +54,56 @@ def fetch_data_from_yahoo_finance(tickers: List[str]|Set[str],
         return {}
     df = yf.download(tickers, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'),
                      interval=interval, auto_adjust=True, keepna=True)
-    tickers_found = df.columns.get_level_values(level=1).unique().tolist()
-    dfs = {}
-    for ticker in tickers_found:
-        dfs[ticker] = df.xs(key=ticker, level=1, axis='columns')
-    return dfs
+    if isinstance(df.columns, pandas.MultiIndex):
+        tickers_found = df.columns.get_level_values(level=1).unique().tolist()
+        dfs = {}
+        for ticker in tickers_found:
+            dfs[ticker] = df.xs(key=ticker, level=1, axis='columns')
+        return dfs
+    else:
+        return df
 
 
-def fetch_price_data(stock_symbols, data_dir, log_file, hours_to_skip=24):
+def get_earlier_date(dic: Dict[str, str]) -> datetime:
+    if dic is None or len(dic) == 0:
+        return datetime.min
+    dates = [datetime.fromisoformat(str_date) for str_date in dic.values()]
+    return min(dates)
+
+
+def fetch_price_data(existing_symbols: set, all_stocks_symbols: set, data_dir, log_file, interval: Literal['5m', '1d'] = '1D', hours_to_skip=24):
+    match interval:
+        case '5m': start_time = datetime.now() - timedelta(days=59)
+        case '1d' | '1D': start_time = datetime.now() - timedelta(days=5 * 365)
+        case _: raise ValueError(f"Invalid interval: {interval}")
     # Load existing logs if available
     try:
         with open(log_file, 'r') as f:
             symbol_time_dict = json.load(f)
     except FileNotFoundError:
         symbol_time_dict = {}
-
-    all_data = {}
-    count = 0
+    existing_symbols_start_time = max(start_time, get_earlier_date(symbol_time_dict))
 
     # Create the directory if it doesn't exist
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     hdf5_file_path = join(data_dir, "eod_price_data.h5")
 
-    existing_symbols = set()
+    new_symbols = all_stocks_symbols.difference(existing_symbols)
+    existing_symbols_dfs = fetch_data_from_yahoo_finance(existing_symbols, existing_symbols_start_time, datetime.now(), interval=interval)
+    new_symbols_dfs = fetch_data_from_yahoo_finance(new_symbols, start_time, datetime.now(), interval=interval)
 
-    try:
-        with pd.HDFStore(hdf5_file_path, 'r') as store:
-            existing_symbols = {key[1:] for key in store.keys()}
-    except FileNotFoundError:
-        pass
+    # Update log
+    for symbol in all_stocks_symbols:
+        symbol_time_dict[symbol] = datetime.now().isoformat()
+    with open(log_file, 'w') as f:
+        json.dump(symbol_time_dict, f)
 
-    existing_symbols.update(stock_symbols)
-    dfs = fetch_data_from_yahoo_finance(existing_symbols, datetime.now() - timedelta(days=59), datetime.now(), interval='5m')
-    for ticker, df in dfs.items():
-        last_downloaded_time = symbol_time_dict.get(ticker, None)
-
-        # if last_downloaded_time:
-        #     last_downloaded_time = datetime.fromisoformat(last_downloaded_time)
-        #     time_since_last_download = datetime.now() - last_downloaded_time
-        #     if time_since_last_download < timedelta(hours=hours_to_skip):
-        #         logging.info(f"Data for symbol {ticker} was downloaded recently. Skipping...")
-        #         continue
-
-        # logging.info(f"{symbol}: Downloading from EODHD...")
-        # url = f'https://eodhd.com/api/eod/{symbol}.US?api_token={api_token}&fmt=csv'
-        # response = requests.get(url)
-        # if response.status_code != 200:
-        #     logging.error(f"Failed to fetch data for symbol {symbol}. HTTP Status Code: {response.status_code}")
-        #     continue
-        #
-        # csv_data = StringIO(response.text)
-        # df = pd.read_csv(csv_data)
-
-        # if 'Date' not in df.columns:
-        #     logging.error(f"No 'Date' column in the data for symbol {symbol}. Skipping...")
-        #     continue
-
-        # Set 'Date' as DateTime index
-        # df['Date'] = pd.to_datetime(df['Date'])
-        # df.set_index('Date', inplace=True)
-
-        # Add the DataFrame to the all_data dictionary
-        all_data[ticker] = df
-
-        # Update log
-        symbol_time_dict[ticker] = datetime.now().isoformat()
-        with open(log_file, 'w') as f:
-            json.dump(symbol_time_dict, f)
-
-        count += 1
-
-        # Update the HDF5 file every 100 symbols
-        if count % 100 == 0:
-            with pd.HDFStore(hdf5_file_path, mode='a') as store:
-                for ticker, data in all_data.items():
-                    store.put(ticker, data)
-            logging.info(f"Saved {list(all_data.keys())} to HDF5 file.")
-            all_data = {}
-
-    # Save remaining data to HDF5
-    if all_data:
-        with pd.HDFStore(hdf5_file_path, mode='a') as store:
-            for ticker, data in all_data.items():
-                store.put(ticker, data)
-        logging.info(f"Saved remaining {list(all_data.keys())} to HDF5 file.")
+    all_symbols_dfs = existing_symbols_dfs.copy()
+    all_symbols_dfs.update(new_symbols_dfs)
+    # Update the HDF5 file every 100 symbols
+    with pd.HDFStore(hdf5_file_path, mode='a') as store:
+        for symbol, data in all_symbols_dfs.items():
+            store.put(symbol, data)
 
     logging.info("Finished updating HDF5 file.")
 
@@ -189,15 +149,17 @@ def fetch_price_data(stock_symbols, data_dir, log_file, hours_to_skip=24):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
-    data_dir = '../data/'
+    data_dir = Config.data_dir
     log_file_path = "../data/symbol_price_data_time_log.json"
-    tickers_filepath = 'tickers_list.yaml'
+    tickers_filepath = Config.tickers_filepath
+    h5_filename = Config.eod_file_path
+    interval: Literal['5m', '1d'] = '1d'
 
-    symbols = get_symbols(data_dir + 'symbols.h5', key='US')
-    symbols = set(symbols + Config.get_tickers_list())
-    logging.info(f'Processing {len(symbols)} symbols')
+    existing_symbols = get_existing_symbols_in_db(data_dir + h5_filename)
+    all_symbols = set(Config.get_tickers_list())
+    logging.info(f'Processing {len(all_symbols)} symbols')
 
-    fetch_price_data(symbols, data_dir, log_file_path, hours_to_skip=72)
+    fetch_price_data(existing_symbols, all_symbols,  data_dir, log_file_path, interval=interval, hours_to_skip=72)
     #
     # symbol = 'TSLA'
     # hdf5_file_path = f"{data_dir}/eod_price_data.h5"
