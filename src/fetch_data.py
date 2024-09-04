@@ -15,6 +15,8 @@ import yfinance as yf
 
 from src.config import Config
 
+pd.set_option('io.hdf.default_format','table')
+
 LastUpdateDict = Dict[str, datetime]
 
 
@@ -86,7 +88,7 @@ def fetch_price_data(existing_symbols: set, all_stocks_symbols: set, data_dir, l
 
     # Create the directory if it doesn't exist
     Path(data_dir).mkdir(parents=True, exist_ok=True)
-    hdf5_file_path = join(data_dir, "eod_price_data.h5")
+    hdf5_file_path = Config.eod_file_path
 
     new_symbols = all_stocks_symbols.difference(existing_symbols)
     existing_symbols_dfs = fetch_data_from_yahoo_finance(existing_symbols, existing_symbols_start_time, datetime.now(), interval=interval)
@@ -100,10 +102,10 @@ def fetch_price_data(existing_symbols: set, all_stocks_symbols: set, data_dir, l
 
     all_symbols_dfs = existing_symbols_dfs.copy()
     all_symbols_dfs.update(new_symbols_dfs)
-    # Update the HDF5 file every 100 symbols
+
     with pd.HDFStore(hdf5_file_path, mode='a') as store:
         for symbol, data in all_symbols_dfs.items():
-            store.put(symbol, data)
+            store.put(symbol, data, format='table', append=True, data_columns=True)
 
     logging.info("Finished updating HDF5 file.")
 
