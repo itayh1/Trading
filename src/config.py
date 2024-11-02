@@ -5,7 +5,7 @@ import yaml
 
 
 class Config:
-    data_dir = '../data/'
+    data_dir = 'data/'
     eod_file_path = path.join(data_dir, "eod_price_data.h5")
     five_m_file_path = path.join(data_dir, "5m_price_data.h5")
     tickers_filepath = "tickers_list.yaml"

@@ -1,0 +1,13 @@
+1. Create conda environment
+2. install conda requirements:
+    - conda install --file requirements.txt
+    - conda install "numpy<2.0"
+    - pip install pandas_ta lightweight_charts
+
+for linux do the following steps:
+    - pip install pandas_ta lightweight_charts
+    for running lightweight_charts:
+        - sudo apt-get install build-essential libgl1-mesa-dev
+        - pip3 install pyqt5 pyqtwebengine
+        - pip3 install pywebview
+        - pip3 install pywebview[qt]

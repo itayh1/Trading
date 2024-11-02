@@ -6,7 +6,7 @@ from lightweight_charts import Chart
 from lightweight_charts.abstract import Line
 from pandas import HDFStore
 
-from src.config import Config
+from config import Config
 
 class ChartWrapper:
     def __init__(self, store: HDFStore):
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     # df = pd.read_csv('ohlcv.csv')
     tickers = Config.get_tickers_list()
     h5_file_path = Path(Config.eod_file_path)
-    with pd.HDFStore(h5_file_path.as_posix(), 'r+') as store:
+    with pd.HDFStore(h5_file_path.resolve(), 'r+') as store:
         chart_wrapper = ChartWrapper(store)
         chart_wrapper.show()
 

@@ -5,3 +5,5 @@ data
 ./src/.ipynb_checkpoints
 #./src/*.html
 #./src/*.md
+/src/__pycache__
+.vscode

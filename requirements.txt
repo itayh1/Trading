@@ -10,5 +10,4 @@ pytables
 quantstats
 requests
 yfinance
-pandas_ta
-yaml
+pyyaml

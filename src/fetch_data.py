@@ -13,7 +13,7 @@ import pandas as pd
 
 import yfinance as yf
 
-from src.config import Config
+from config import Config
 
 pd.set_option('io.hdf.default_format','table')
 
