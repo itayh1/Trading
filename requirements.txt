@@ -2,12 +2,9 @@
 # $ conda create --name <env> --file <this file>
 # platform: win-64
 
-numba
-numpy
+pyyaml
 pandas
-pip
-pytables
+tables
 quantstats
 requests
 yfinance
-pyyaml

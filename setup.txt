@@ -1,7 +1,7 @@
 1. Create conda environment
 2. install conda requirements:
-    - conda install --file requirements.txt
     - conda install "numpy<2.0"
+    - conda install --file requirements.txt
     - pip install pandas_ta lightweight_charts
 
 for linux do the following steps:
