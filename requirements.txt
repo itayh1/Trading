@@ -5,6 +5,6 @@
 pyyaml
 pandas
 tables
-quantstats
+# quantstats
 requests
 yfinance

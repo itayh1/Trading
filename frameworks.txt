@@ -1,0 +1,5 @@
+
+
+IBridgePy:
+* doesn't support local data out of the box (does support local csv files) - abandoned for now
+

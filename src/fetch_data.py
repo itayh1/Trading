@@ -18,7 +18,7 @@ from config import Config
 pd.set_option('io.hdf.default_format','table')
 
 LastUpdateDict = Dict[str, datetime]
-
+Interval = Literal['5m', '1d']
 
 def get_existing_symbols_in_db(h5_file_path) -> set:
     """
@@ -73,7 +73,8 @@ def get_earlier_date(dic: Dict[str, str]) -> datetime:
     return min(dates)
 
 
-def fetch_price_data(existing_symbols: set, all_stocks_symbols: set, data_dir, log_file, interval: Literal['5m', '1d'] = '1D', hours_to_skip=24):
+def fetch_price_data(existing_symbols: set, all_stocks_symbols: set, hdf5_file_path: str, data_dir, 
+                    log_file, interval: Interval = '1D', hours_to_skip=24):
     match interval:
         case '5m': start_time = datetime.now() - timedelta(days=59)
         case '1d' | '1D': start_time = datetime.now() - timedelta(days=5 * 365)
@@ -88,7 +89,6 @@ def fetch_price_data(existing_symbols: set, all_stocks_symbols: set, data_dir, l
 
     # Create the directory if it doesn't exist
     Path(data_dir).mkdir(parents=True, exist_ok=True)
-    hdf5_file_path = Config.eod_file_path
 
     new_symbols = all_stocks_symbols.difference(existing_symbols)
     existing_symbols_dfs = fetch_data_from_yahoo_finance(existing_symbols, existing_symbols_start_time, datetime.now(), interval=interval)
@@ -97,7 +97,7 @@ def fetch_price_data(existing_symbols: set, all_stocks_symbols: set, data_dir, l
     # Update log
     for symbol in all_stocks_symbols:
         symbol_time_dict[symbol] = datetime.now().isoformat()
-    with open(log_file, 'w') as f:
+    with open(log_file, 'w+') as f:
         json.dump(symbol_time_dict, f)
 
     all_symbols_dfs = existing_symbols_dfs.copy()
@@ -152,16 +152,20 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
     data_dir = Config.data_dir
-    log_file_path = "../data/symbol_price_data_time_log.json"
     tickers_filepath = Config.tickers_filepath
-    h5_filename = Config.eod_file_path
-    interval: Literal['5m', '1d'] = '1d'
+    interval: Interval = '5m'
+    if interval == '5m':
+        log_file_path = Config.five_m_last_updated_datetime_path
+        h5_filename = Config.five_m_file_path
+    elif interval == '1d':
+        log_file_path = Config.eod_last_updated_datetime_path
+        h5_filename = Config.eod_file_path
 
-    existing_symbols = get_existing_symbols_in_db(data_dir + h5_filename)
+    existing_symbols = get_existing_symbols_in_db(h5_filename)
     all_symbols = set(Config.get_tickers_list())
     logging.info(f'Processing {len(all_symbols)} symbols')
 
-    fetch_price_data(existing_symbols, all_symbols,  data_dir, log_file_path, interval=interval, hours_to_skip=72)
+    fetch_price_data(existing_symbols, all_symbols,  h5_filename, data_dir, log_file_path, interval=interval, hours_to_skip=72)
     #
     # symbol = 'TSLA'
     # hdf5_file_path = f"{data_dir}/eod_price_data.h5"

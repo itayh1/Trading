@@ -8,10 +8,11 @@ from lightweight_charts.abstract import Line
 from pandas import HDFStore
 
 from config import Config
+from backtest.backtest_vectorbt import ma_150_crossed, cci_cross_zero2, moving_avg_breakout
 
 class ChartWrapper:
     def __init__(self, store: HDFStore):
-        self.chart = Chart(inner_width=1, inner_height=0.8)
+        self.chart = Chart(inner_width=1, inner_height=0.7)
         self.store = store
         self.existing_symbols = {key[1:] for key in store.keys()}
         self.current_indicators: Dict[str, Line] = {}
@@ -20,7 +21,7 @@ class ChartWrapper:
         self.chart.events.search += self.on_search
         self.chart.topbar.textbox('symbol', 'AAPL')
 
-        self.subchart = self.chart.create_subchart(width=1, height=0.2, sync=True)
+        self.subchart = self.chart.create_subchart(width=1, height=0.3, sync=True)
 
         self.set_data('AAPL')
 
@@ -37,12 +38,38 @@ class ChartWrapper:
         self.chart.set(df)
 
         self._draw_indicators(df)
+        self._draw_signals(df)
 
         return True
 
     def _draw_indicators(self, df: pd.DataFrame):
         self._draw_smas(df)
         self._draw_cci(df)
+
+    def _draw_signals(self, df: pd.DataFrame):
+        # Generate signals using both strategies
+        # ma_enter, ma_exit = ma_150_crossed(df)
+        cci_enter, cci_exit = moving_avg_breakout(df)
+
+        # Create markers for enter signals
+        enter_markers = [
+            {
+                'time': time, 'position': 'below', 'color': 'green', 'shape': 'circle', 'text': ''
+            }
+            for time in df.index[cci_enter]
+        ]
+
+        # Create markers for exit signals
+        exit_markers = [
+            {
+                'time': time, 'position': 'below', 'color': 'red', 'shape': 'circle', 'text': ''
+            }
+            for time in df.index[cci_exit]
+        ]
+
+        # Add markers to the chart
+        self.chart.marker_list(exit_markers)
+        self.chart.marker_list(enter_markers)
 
     def _draw_smas(self, df: pd.DataFrame):
         sma = df.ta.sma(length=20).to_frame()
@@ -64,6 +91,11 @@ class ChartWrapper:
         cci_upper_df = cci.copy()
         cci_upper_df[cci_upper_df.columns[-1]] = 100
         cci_upper_line.set(cci_upper_df)
+
+        cci_middle_line = self.current_indicators.setdefault('cci_middle_line', self.subchart.create_line(color='white', width=1))
+        cci_middle_df = cci.copy()
+        cci_middle_df[cci_middle_df.columns[-1]] = 0
+        cci_middle_line.set(cci_middle_df)
 
         cci_lower_line = self.current_indicators.setdefault('cci_lower_line', self.subchart.create_line(color='green'))
         cci_lower_df = cci.copy()
@@ -89,7 +121,7 @@ if __name__ == '__main__':
     # Columns: time | open | high | low | close | volume
     # df = pd.read_csv('ohlcv.csv')
     tickers = Config.get_tickers_list()
-    h5_file_path = Path(Config.eod_file_path)
+    h5_file_path = Path(Config.eod_price_data_stooq_path)
     with pd.HDFStore(h5_file_path.resolve(), 'r+') as store:
         chart_wrapper = ChartWrapper(store)
         chart_wrapper.show()

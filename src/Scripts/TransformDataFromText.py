@@ -1,15 +1,19 @@
 import os
+import re
+import subprocess
+from zipfile import ZipFile
+from os import path
 
 import pandas as pd
 from pandas import HDFStore
+from tqdm import tqdm
 
 from src.config import Config
 
 
 # based on stock data downloaded from "https://stooq.com/db/h/".
 # transform the selected stocks from the raw text data into dataframes
-
-def parse_stock_data(directory_path, tickers):
+def parse_stock_data(directory_path, tickers=None):
     """
     Parses stock data from files in the given directory, loading only selected tickers into dataframes.
 
@@ -20,16 +24,28 @@ def parse_stock_data(directory_path, tickers):
     Returns:
         dict: A dictionary where keys are tickers and values are Pandas dataframes of stock data.
     """
-    tickers =  [ticker.lower() for ticker in tickers]
+    ticker_regex = re.compile(r"^[a-zA-Z]{1,5}(\.[a-zA-Z]{1,2})?$")
+    if tickers is None:
+        tickers = []
+    else:
+        tickers =  [ticker.lower() for ticker in tickers]
     stock_data = {}
 
-    for root, _, files in os.walk(directory_path):
-        for file in files:
-            # Extract ticker from the file name (assuming file name contains ticker)
-            ticker = file.split('.')[0]
 
-            # Process file only if the ticker is in the provided tickers list
-            if ticker in tickers:
+    total_files = sum(len(files) for _, _, files in os.walk(directory_path))
+    with tqdm(total=total_files, desc="Parsing stock data") as pbar:
+        for root, _, files in os.walk(directory_path):
+            for file in files:
+                pbar.update(1)
+                if not file.endswith('.txt'): continue
+
+                # Extract ticker from the file name (assuming file name contains ticker)
+                ticker = file.split('.')[0]
+
+                if not ticker_regex.match(ticker): continue
+
+                # Process file only if the ticker is in the provided tickers list
+                # if ticker in tickers:
                 file_path = os.path.join(root, file)
 
                 try:
@@ -61,27 +77,34 @@ def print_hdfs_tickers(hdfs_file_path: str):
             nrows = store.get_storer(key).nrows
             print(f"{key}: {nrows} rows")
 
-def main():
-    # path = 'data/daily/nasdaq stocks/1/aapl.us.txt'
-    # df = pd.read_csv(
-    #     path,
-    #     names=['TICKER', 'PER', 'DATE', 'TIME', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'VOL', 'OPENINT'],
-    #     header=None,
-    #     skiprows=1,
-    # )
-    # df = df[['DATE', 'TIME', 'OPEN', 'HIGH', 'LOW', 'CLOSE', 'VOL']]
-    # df['DATE'] = pd.to_datetime(df['DATE'], format='%Y%m%d')
-    # df.set_index('DATE', inplace=True)
-    # # df.reset_index(inplace=True)
-    # print(df.head())
-    h5_file_path = 'eod_price_data_stooq.h5'
-    directory_path = "data/daily"  # Replace with the path to your directory
-    selected_tickers = ['AAPL', 'GOOGL', 'MSFT']  # Replace with your desired tickers
+def extract_zip_file(zip_filepath: str, extract_path: str) -> (bool, str):
+    zip_file_path = path.join(Config.data_dir, zip_filepath)
 
-    stock_dataframes = parse_stock_data(directory_path, selected_tickers)
+    if not os.path.exists(zip_file_path):
+        return (False, "")
+
+    dest_folder = path.join(Config.data_dir, extract_path)
+    if os.path.exists(dest_folder):
+        return (True, dest_folder)
+
+    try:
+        subprocess.run(["unzip", zip_file_path, "-d", dest_folder])
+    except Exception as e:
+        return (False, e)
+
+    return (True, dest_folder)
+
+def main():
+    directory_path = path.join(Config.data_dir,'d_us')
+    # (succeed, directory_path) = extract_zip_file('d_us_txt.zip', 'd_us')
+    # if not succeed:
+    #     directory_path = "data/"  # Replace with the path to your directory
+    # selected_tickers = ['AAPL', 'GOOGL', 'MSFT']  # Replace with your desired tickers
+
+    stock_dataframes = parse_stock_data(directory_path, None)
 
     with pd.HDFStore(Config.eod_price_data_stooq_path, mode='w') as store:
-        for symbol, data in stock_dataframes.items():
+        for symbol, data in tqdm(stock_dataframes.items(), desc="saving parsed data into HDF5 store"):
             store.put(symbol, data, format='table', append=True, data_columns=True)
 
     # print_hdfs_tickers(Config.eod_price_data_stooq_path)
